@@ -42,6 +42,22 @@ runs:
       shell: bash
       run: pip install agentverif-sign --quiet
 
+    - name: Scan agent (OWASP LLM Top 10)
+      if: inputs.mode == 'sign'
+      shell: bash
+      run: |
+        SCAN=$(curl -sf -X POST https://api.agentverif.com/scan \
+          -F "file=@${{ inputs.agent_zip }}" || echo '{"score":0,"passed":false}')
+        SCORE=$(echo "$SCAN" | python3 -c "import json,sys; print(json.load(sys.stdin).get('score',0))")
+        PASSED=$(echo "$SCAN" | python3 -c "import json,sys; print(json.load(sys.stdin).get('passed',False))")
+        echo "## 🔍 AgentVerif Scan: $SCORE/100" >> $GITHUB_STEP_SUMMARY
+        if [ "$PASSED" != "True" ]; then
+          echo "## ❌ Scan failed ($SCORE/100) — not signed" >> $GITHUB_STEP_SUMMARY
+          echo "Score below 70. Fix security issues before certifying." >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+        echo "## ✅ Scan passed ($SCORE/100)" >> $GITHUB_STEP_SUMMARY
+
     - name: Sign agent
       if: inputs.mode == 'sign'
       shell: bash
